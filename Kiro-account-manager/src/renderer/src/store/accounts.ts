@@ -1827,14 +1827,15 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
   // 触发后台刷新（在主进程执行，不阻塞 UI）
   triggerBackgroundRefresh: async () => {
-    const { accounts, autoRefreshConcurrency } = get()
+    const { accounts, autoRefreshConcurrency, autoRefreshSyncInfo, autoSwitchEnabled } = get()
     const now = Date.now()
 
-    // 筛选需要刷新 Token 的账号
+    // 筛选需要处理的账号
     const accountsToRefresh: Array<{
       id: string
       email: string
       idp?: string
+      needsTokenRefresh: boolean
       credentials: {
         refreshToken: string
         clientId?: string
@@ -1855,13 +1856,15 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
       const expiresAt = account.credentials.expiresAt
       const timeUntilExpiry = expiresAt ? expiresAt - now : Infinity
+      const needsTokenRefresh = expiresAt && timeUntilExpiry <= TOKEN_REFRESH_BEFORE_EXPIRY
       
-      // Token 已过期或即将过期
-      if (expiresAt && timeUntilExpiry <= TOKEN_REFRESH_BEFORE_EXPIRY) {
+      // Token 即将过期需要刷新，或开启了同步检测/自动换号需要检查账户信息
+      if (needsTokenRefresh || autoRefreshSyncInfo || autoSwitchEnabled) {
         accountsToRefresh.push({
           id,
           email: account.email,
           idp: account.idp,
+          needsTokenRefresh: !!needsTokenRefresh,
           credentials: {
             refreshToken: account.credentials.refreshToken || '',
             clientId: account.credentials.clientId,
@@ -1876,14 +1879,13 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     }
 
     if (accountsToRefresh.length === 0) {
-      console.log('[BackgroundRefresh] No accounts need refresh')
+      console.log('[BackgroundRefresh] No accounts need processing')
       return
     }
 
-    console.log(`[BackgroundRefresh] Triggering refresh for ${accountsToRefresh.length} accounts...`)
+    console.log(`[BackgroundRefresh] Triggering refresh for ${accountsToRefresh.length} accounts (syncInfo: ${autoRefreshSyncInfo})...`)
     
     // 调用主进程后台刷新，不等待结果（通过 IPC 事件接收）
-    const { autoRefreshSyncInfo } = get()
     window.api.backgroundBatchRefresh(accountsToRefresh, autoRefreshConcurrency, autoRefreshSyncInfo)
   },
 
@@ -1922,8 +1924,18 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
         accessToken?: string
         refreshToken?: string
         expiresIn?: number
-        usage?: { current?: number; limit?: number; baseCurrent?: number; baseLimit?: number; freeTrialCurrent?: number; freeTrialLimit?: number; freeTrialExpiry?: string; nextResetDate?: string }
-        subscription?: { type?: string; title?: string }
+        usage?: {
+          current?: number
+          limit?: number
+          baseCurrent?: number
+          baseLimit?: number
+          freeTrialCurrent?: number
+          freeTrialLimit?: number
+          freeTrialExpiry?: string
+          bonuses?: Array<{ code: string; name: string; current: number; limit: number; expiresAt?: string }>
+          nextResetDate?: string
+        }
+        subscription?: { type?: string; title?: string; daysRemaining?: number; expiresAt?: number }
         userInfo?: { email?: string; userId?: string }
         status?: string
         errorMessage?: string
@@ -1941,18 +1953,31 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
           refreshToken: refreshData?.refreshToken || account.credentials.refreshToken,
           expiresAt: refreshData?.expiresIn ? now + refreshData.expiresIn * 1000 : account.credentials.expiresAt
         },
-        usage: refreshData?.usage ? {
-          ...account.usage,
-          current: refreshData.usage.current ?? account.usage.current,
-          limit: refreshData.usage.limit ?? account.usage.limit,
-          baseCurrent: refreshData.usage.baseCurrent ?? account.usage.baseCurrent,
-          baseLimit: refreshData.usage.baseLimit ?? account.usage.baseLimit,
-          freeTrialCurrent: refreshData.usage.freeTrialCurrent ?? account.usage.freeTrialCurrent,
-          freeTrialLimit: refreshData.usage.freeTrialLimit ?? account.usage.freeTrialLimit,
-          freeTrialExpiry: refreshData.usage.freeTrialExpiry ?? account.usage.freeTrialExpiry,
-          nextResetDate: refreshData.usage.nextResetDate ?? account.usage.nextResetDate,
-          lastUpdated: now
-        } : account.usage,
+        usage: refreshData?.usage ? (() => {
+          const newCurrent = refreshData.usage.current ?? account.usage.current
+          const newLimit = refreshData.usage.limit ?? account.usage.limit
+          return {
+            ...account.usage,
+            current: newCurrent,
+            limit: newLimit,
+            percentUsed: newLimit > 0 ? newCurrent / newLimit : 0,
+            baseCurrent: refreshData.usage.baseCurrent ?? account.usage.baseCurrent,
+            baseLimit: refreshData.usage.baseLimit ?? account.usage.baseLimit,
+            freeTrialCurrent: refreshData.usage.freeTrialCurrent ?? account.usage.freeTrialCurrent,
+            freeTrialLimit: refreshData.usage.freeTrialLimit ?? account.usage.freeTrialLimit,
+            freeTrialExpiry: refreshData.usage.freeTrialExpiry ?? account.usage.freeTrialExpiry,
+            bonuses: refreshData.usage.bonuses ?? account.usage.bonuses,
+            nextResetDate: refreshData.usage.nextResetDate ?? account.usage.nextResetDate,
+            lastUpdated: now
+          }
+        })() : account.usage,
+        subscription: refreshData?.subscription ? {
+          ...account.subscription,
+          type: (refreshData.subscription.type as SubscriptionType) || account.subscription.type,
+          title: refreshData.subscription.title || account.subscription.title,
+          daysRemaining: refreshData.subscription.daysRemaining ?? account.subscription.daysRemaining,
+          expiresAt: refreshData.subscription.expiresAt ?? account.subscription.expiresAt
+        } : account.subscription,
         email: refreshData?.userInfo?.email || account.email,
         userId: refreshData?.userInfo?.userId || account.userId,
         status: newStatus,
@@ -1995,8 +2020,18 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
       const now = Date.now()
       const checkData = resultData as {
-        usage?: { current?: number; limit?: number; baseCurrent?: number; baseLimit?: number; freeTrialCurrent?: number; freeTrialLimit?: number; freeTrialExpiry?: string; nextResetDate?: string }
-        subscription?: { type?: string; title?: string }
+        usage?: {
+          current?: number
+          limit?: number
+          baseCurrent?: number
+          baseLimit?: number
+          freeTrialCurrent?: number
+          freeTrialLimit?: number
+          freeTrialExpiry?: string
+          bonuses?: Array<{ code: string; name: string; current: number; limit: number; expiresAt?: string }>
+          nextResetDate?: string
+        }
+        subscription?: { type?: string; title?: string; daysRemaining?: number; expiresAt?: number }
         userInfo?: { email?: string; userId?: string }
         status?: string
         errorMessage?: string
@@ -2014,22 +2049,30 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
       accounts.set(id, {
         ...account,
-        usage: checkData?.usage ? {
-          ...account.usage,
-          current: checkData.usage.current ?? account.usage.current,
-          limit: checkData.usage.limit ?? account.usage.limit,
-          baseCurrent: checkData.usage.baseCurrent ?? account.usage.baseCurrent,
-          baseLimit: checkData.usage.baseLimit ?? account.usage.baseLimit,
-          freeTrialCurrent: checkData.usage.freeTrialCurrent ?? account.usage.freeTrialCurrent,
-          freeTrialLimit: checkData.usage.freeTrialLimit ?? account.usage.freeTrialLimit,
-          freeTrialExpiry: checkData.usage.freeTrialExpiry ?? account.usage.freeTrialExpiry,
-          nextResetDate: checkData.usage.nextResetDate ?? account.usage.nextResetDate,
-          lastUpdated: now
-        } : account.usage,
+        usage: checkData?.usage ? (() => {
+          const newCurrent = checkData.usage.current ?? account.usage.current
+          const newLimit = checkData.usage.limit ?? account.usage.limit
+          return {
+            ...account.usage,
+            current: newCurrent,
+            limit: newLimit,
+            percentUsed: newLimit > 0 ? newCurrent / newLimit : 0,
+            baseCurrent: checkData.usage.baseCurrent ?? account.usage.baseCurrent,
+            baseLimit: checkData.usage.baseLimit ?? account.usage.baseLimit,
+            freeTrialCurrent: checkData.usage.freeTrialCurrent ?? account.usage.freeTrialCurrent,
+            freeTrialLimit: checkData.usage.freeTrialLimit ?? account.usage.freeTrialLimit,
+            freeTrialExpiry: checkData.usage.freeTrialExpiry ?? account.usage.freeTrialExpiry,
+            bonuses: checkData.usage.bonuses ?? account.usage.bonuses,
+            nextResetDate: checkData.usage.nextResetDate ?? account.usage.nextResetDate,
+            lastUpdated: now
+          }
+        })() : account.usage,
         subscription: checkData?.subscription ? {
           ...account.subscription,
           type: (checkData.subscription.type as 'Free' | 'Pro' | 'Enterprise' | 'Teams') ?? account.subscription.type,
-          title: checkData.subscription.title ?? account.subscription.title
+          title: checkData.subscription.title ?? account.subscription.title,
+          daysRemaining: checkData.subscription.daysRemaining ?? account.subscription.daysRemaining,
+          expiresAt: checkData.subscription.expiresAt ?? account.subscription.expiresAt
         } : account.subscription,
         email: checkData?.userInfo?.email || account.email,
         userId: checkData?.userInfo?.userId || account.userId,

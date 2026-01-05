@@ -369,7 +369,7 @@ export const AccountCard = memo(function AccountCard({
             <div className="flex justify-between items-end text-xs">
                 <span className="text-muted-foreground font-medium">{isEn ? 'Usage' : '使用量'}</span>
                 <span className={cn("font-mono font-medium", isHighUsage ? "text-amber-600" : "text-foreground")}>
-                   {(account.usage.percentUsed * 100).toFixed(0)}%
+                   {(account.usage.percentUsed * 100).toFixed(usagePrecision ? 2 : 0)}%
                 </span>
             </div>
             <Progress

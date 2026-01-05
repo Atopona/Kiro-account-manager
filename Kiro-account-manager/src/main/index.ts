@@ -1300,6 +1300,7 @@ app.whenReady().then(() => {
   ipcMain.handle('background-batch-refresh', async (_event, accounts: Array<{
     id: string
     idp?: string
+    needsTokenRefresh?: boolean
     credentials: {
       refreshToken: string
       clientId?: string
@@ -1324,6 +1325,7 @@ app.whenReady().then(() => {
         batch.map(async (account) => {
           try {
             const { refreshToken, clientId, clientSecret, region, authMethod, accessToken, provider } = account.credentials
+            const needsTokenRefresh = account.needsTokenRefresh !== false // 默认为 true（兼容旧版本）
             
             // 确定正确的 idp
             let idp = 'BuilderId'
@@ -1333,35 +1335,45 @@ app.whenReady().then(() => {
               idp = provider
             }
             
-            if (!refreshToken) {
-              failed++
-              completed++
-              return
-            }
+            let newAccessToken = accessToken
+            let newRefreshToken = refreshToken
+            let newExpiresIn: number | undefined
 
-            // 刷新 Token
-            const refreshResult = await refreshTokenByMethod(
-              refreshToken,
-              clientId || '',
-              clientSecret || '',
-              region || 'us-east-1',
-              authMethod
-            )
+            // 只有需要刷新 Token 时才刷新
+            if (needsTokenRefresh) {
+              if (!refreshToken) {
+                failed++
+                completed++
+                return
+              }
 
-            if (!refreshResult.success) {
-              failed++
-              completed++
-              // 通知渲染进程刷新失败
-              mainWindow?.webContents.send('background-refresh-result', {
-                id: account.id,
-                success: false,
-                error: refreshResult.error
-              })
-              return
+              // 刷新 Token
+              const refreshResult = await refreshTokenByMethod(
+                refreshToken,
+                clientId || '',
+                clientSecret || '',
+                region || 'us-east-1',
+                authMethod
+              )
+
+              if (!refreshResult.success) {
+                failed++
+                completed++
+                // 通知渲染进程刷新失败
+                mainWindow?.webContents.send('background-refresh-result', {
+                  id: account.id,
+                  success: false,
+                  error: refreshResult.error
+                })
+                return
+              }
+
+              newAccessToken = refreshResult.accessToken || accessToken
+              newRefreshToken = refreshResult.refreshToken || refreshToken
+              newExpiresIn = refreshResult.expiresIn
             }
 
             // 获取账号信息
-            const newAccessToken = refreshResult.accessToken || accessToken
             if (!newAccessToken) {
               failed++
               completed++
@@ -1369,20 +1381,126 @@ app.whenReady().then(() => {
             }
 
             // 根据 syncInfo 决定是否检测账户信息
-            let usageData: unknown = null
+            let parsedUsage: {
+              current: number
+              limit: number
+              baseCurrent: number
+              baseLimit: number
+              freeTrialCurrent: number
+              freeTrialLimit: number
+              freeTrialExpiry?: string
+              bonuses: Array<{ code: string; name: string; current: number; limit: number; expiresAt?: string }>
+              nextResetDate?: string
+            } | undefined
             let userInfoData: UserInfoResponse | undefined
+            let subscriptionData: { type: string; title: string; daysRemaining?: number; expiresAt?: number } | undefined
             let status = 'active'
             let errorMessage: string | undefined
 
             if (syncInfo) {
               // 调用 GetUserUsageAndLimits API（CBOR 格式 + 正确的 Cookie 认证）
               try {
-                usageData = await kiroApiRequest(
+                interface UsageBreakdownItem {
+                  resourceType?: string
+                  currentUsage?: number
+                  currentUsageWithPrecision?: number
+                  usageLimit?: number
+                  usageLimitWithPrecision?: number
+                  freeTrialInfo?: {
+                    freeTrialStatus?: string
+                    usageLimit?: number
+                    usageLimitWithPrecision?: number
+                    currentUsage?: number
+                    currentUsageWithPrecision?: number
+                    freeTrialExpiry?: string
+                  }
+                  bonuses?: Array<{
+                    bonusCode?: string
+                    displayName?: string
+                    usageLimit?: number
+                    usageLimitWithPrecision?: number
+                    currentUsage?: number
+                    currentUsageWithPrecision?: number
+                    expiresAt?: string
+                    status?: string
+                  }>
+                }
+                interface UsageResponse {
+                  usageBreakdownList?: UsageBreakdownItem[]
+                  nextDateReset?: string
+                  subscriptionInfo?: {
+                    subscriptionTitle?: string
+                    type?: string
+                  }
+                }
+                const rawUsage = await kiroApiRequest<UsageResponse>(
                   'GetUserUsageAndLimits',
                   { isEmailRequired: true, origin: 'KIRO_IDE' },
                   newAccessToken,
                   idp
                 )
+                
+                // 解析使用量数据
+                const creditUsage = rawUsage.usageBreakdownList?.find(b => b.resourceType === 'CREDIT')
+                const baseCurrent = creditUsage?.currentUsageWithPrecision ?? creditUsage?.currentUsage ?? 0
+                const baseLimit = creditUsage?.usageLimitWithPrecision ?? creditUsage?.usageLimit ?? 0
+                let freeTrialCurrent = 0
+                let freeTrialLimit = 0
+                let freeTrialExpiry: string | undefined
+                if (creditUsage?.freeTrialInfo?.freeTrialStatus === 'ACTIVE') {
+                  freeTrialCurrent = creditUsage.freeTrialInfo.currentUsageWithPrecision ?? creditUsage.freeTrialInfo.currentUsage ?? 0
+                  freeTrialLimit = creditUsage.freeTrialInfo.usageLimitWithPrecision ?? creditUsage.freeTrialInfo.usageLimit ?? 0
+                  freeTrialExpiry = creditUsage.freeTrialInfo.freeTrialExpiry
+                }
+                const bonuses: Array<{ code: string; name: string; current: number; limit: number; expiresAt?: string }> = []
+                if (creditUsage?.bonuses) {
+                  for (const bonus of creditUsage.bonuses) {
+                    if (bonus.status === 'ACTIVE') {
+                      bonuses.push({
+                        code: bonus.bonusCode || '',
+                        name: bonus.displayName || '',
+                        current: bonus.currentUsageWithPrecision ?? bonus.currentUsage ?? 0,
+                        limit: bonus.usageLimitWithPrecision ?? bonus.usageLimit ?? 0,
+                        expiresAt: bonus.expiresAt
+                      })
+                    }
+                  }
+                }
+                const totalLimit = baseLimit + freeTrialLimit + bonuses.reduce((sum, b) => sum + b.limit, 0)
+                const totalCurrent = baseCurrent + freeTrialCurrent + bonuses.reduce((sum, b) => sum + b.current, 0)
+                
+                parsedUsage = {
+                  current: totalCurrent,
+                  limit: totalLimit,
+                  baseCurrent,
+                  baseLimit,
+                  freeTrialCurrent,
+                  freeTrialLimit,
+                  freeTrialExpiry,
+                  bonuses,
+                  nextResetDate: rawUsage.nextDateReset
+                }
+                
+                // 解析订阅信息
+                const subscriptionTitle = rawUsage.subscriptionInfo?.subscriptionTitle || 'Free'
+                let subscriptionType = 'Free'
+                if (subscriptionTitle.toUpperCase().includes('PRO')) {
+                  subscriptionType = 'Pro'
+                } else if (subscriptionTitle.toUpperCase().includes('ENTERPRISE')) {
+                  subscriptionType = 'Enterprise'
+                } else if (subscriptionTitle.toUpperCase().includes('TEAMS')) {
+                  subscriptionType = 'Teams'
+                }
+                
+                // 计算剩余天数和到期时间
+                let daysRemaining: number | undefined
+                let expiresAt: number | undefined
+                if (rawUsage.nextDateReset) {
+                  expiresAt = new Date(rawUsage.nextDateReset).getTime()
+                  daysRemaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / (1000 * 60 * 60 * 24)))
+                }
+                
+                subscriptionData = { type: subscriptionType, title: subscriptionTitle, daysRemaining, expiresAt }
               } catch (apiError) {
                 const errMsg = apiError instanceof Error ? apiError.message : String(apiError)
                 console.log(`[BackgroundRefresh] Usage API error for ${account.id}:`, errMsg)
@@ -1413,9 +1531,10 @@ app.whenReady().then(() => {
               success: true,
               data: {
                 accessToken: newAccessToken,
-                refreshToken: refreshResult.refreshToken,
-                expiresIn: refreshResult.expiresIn,
-                usage: syncInfo ? usageData : undefined,
+                refreshToken: newRefreshToken,
+                expiresIn: newExpiresIn,
+                usage: parsedUsage,
+                subscription: subscriptionData,
                 userInfo: syncInfo ? userInfoData : undefined,
                 status,
                 errorMessage
@@ -1516,6 +1635,16 @@ app.whenReady().then(() => {
                     currentUsageWithPrecision?: number
                     freeTrialExpiry?: string
                   }
+                  bonuses?: Array<{
+                    bonusCode?: string
+                    displayName?: string
+                    usageLimit?: number
+                    usageLimitWithPrecision?: number
+                    currentUsage?: number
+                    currentUsageWithPrecision?: number
+                    expiresAt?: string
+                    status?: string
+                  }>
                 }>
                 nextDateReset?: string
                 subscriptionInfo?: {
@@ -1544,11 +1673,14 @@ app.whenReady().then(() => {
               freeTrialCurrent?: number
               freeTrialLimit?: number
               freeTrialExpiry?: string
+              bonuses?: Array<{ code: string; name: string; current: number; limit: number; expiresAt?: string }>
               nextResetDate?: string
             } | null = null
             let subscriptionData: {
               type: string
               title: string
+              daysRemaining?: number
+              expiresAt?: number
             } | null = null
             let userInfoData: {
               email?: string
@@ -1577,14 +1709,34 @@ app.whenReady().then(() => {
                 freeTrialExpiry = creditUsage.freeTrialInfo.freeTrialExpiry
               }
               
+              // 解析 bonuses
+              const bonuses: Array<{ code: string; name: string; current: number; limit: number; expiresAt?: string }> = []
+              if (creditUsage?.bonuses) {
+                for (const bonus of creditUsage.bonuses) {
+                  if (bonus.status === 'ACTIVE') {
+                    bonuses.push({
+                      code: bonus.bonusCode || '',
+                      name: bonus.displayName || '',
+                      current: bonus.currentUsageWithPrecision ?? bonus.currentUsage ?? 0,
+                      limit: bonus.usageLimitWithPrecision ?? bonus.usageLimit ?? 0,
+                      expiresAt: bonus.expiresAt
+                    })
+                  }
+                }
+              }
+              
+              const totalLimit = baseLimit + freeTrialLimit + bonuses.reduce((sum, b) => sum + b.limit, 0)
+              const totalCurrent = baseCurrent + freeTrialCurrent + bonuses.reduce((sum, b) => sum + b.current, 0)
+              
               usageData = {
-                current: baseCurrent + freeTrialCurrent,
-                limit: baseLimit + freeTrialLimit,
+                current: totalCurrent,
+                limit: totalLimit,
                 baseCurrent,
                 baseLimit,
                 freeTrialCurrent,
                 freeTrialLimit,
                 freeTrialExpiry,
+                bonuses,
                 nextResetDate: rawUsage.nextDateReset
               }
 
@@ -1598,7 +1750,16 @@ app.whenReady().then(() => {
               } else if (subscriptionTitle.toUpperCase().includes('TEAMS')) {
                 subscriptionType = 'Teams'
               }
-              subscriptionData = { type: subscriptionType, title: subscriptionTitle }
+              
+              // 计算剩余天数和到期时间
+              let daysRemaining: number | undefined
+              let expiresAt: number | undefined
+              if (rawUsage.nextDateReset) {
+                expiresAt = new Date(rawUsage.nextDateReset).getTime()
+                daysRemaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / (1000 * 60 * 60 * 24)))
+              }
+              
+              subscriptionData = { type: subscriptionType, title: subscriptionTitle, daysRemaining, expiresAt }
             } else if (usageRes.status === 'rejected') {
               // API 调用失败（可能是封禁或 Token 过期）
               const errorMsg = usageRes.reason?.message || String(usageRes.reason)

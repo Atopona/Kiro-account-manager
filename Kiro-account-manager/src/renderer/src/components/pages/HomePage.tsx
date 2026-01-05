@@ -20,7 +20,7 @@ const getSubscriptionColor = (type: string, title?: string): string => {
 }
 
 export function HomePage() {
-  const { accounts, getStats, darkMode } = useAccountsStore()
+  const { accounts, getStats, darkMode, usagePrecision } = useAccountsStore()
   const { t } = useTranslation()
   const stats = getStats()
 
@@ -173,7 +173,7 @@ export function HomePage() {
                   <BarChart3 className="h-4 w-4 text-purple-500" />
                   <span className="text-xs text-muted-foreground">{isEn ? 'Usage %' : '使用率'}</span>
                 </div>
-                <p className="text-xl font-bold">{usageStats.percentUsed.toFixed(1)}%</p>
+                <p className="text-xl font-bold">{usageStats.percentUsed.toFixed(usagePrecision ? 2 : 1)}%</p>
               </div>
             </div>
             {/* 进度条 */}

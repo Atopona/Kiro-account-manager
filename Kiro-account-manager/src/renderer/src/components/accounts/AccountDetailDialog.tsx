@@ -133,7 +133,7 @@ export function AccountDetailDialog({
                      usage.percentUsed > 0.9 ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : 
                      "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                    )}>
-                     {(usage.percentUsed * 100).toFixed(1)}% {isEn ? 'used' : '已使用'}
+                     {(usage.percentUsed * 100).toFixed(usagePrecision ? 2 : 1)}% {isEn ? 'used' : '已使用'}
                    </div>
                  </div>
                  <Progress value={usage.percentUsed * 100} className="h-3 rounded-full" indicatorClassName={usage.percentUsed > 0.9 ? "bg-red-500" : "bg-primary"} />
@@ -207,7 +207,7 @@ export function AccountDetailDialog({
                     <div className="text-right">
                       <div className="text-sm font-bold">{formatUsage(bonus.current)} <span className="text-muted-foreground font-normal">/ {formatUsage(bonus.limit)}</span></div>
                       <div className="text-[10px] text-blue-600 font-medium">
-                         {isEn ? 'Used' : '已用'} {((bonus.current / bonus.limit) * 100).toFixed(0)}%
+                         {isEn ? 'Used' : '已用'} {((bonus.current / bonus.limit) * 100).toFixed(usagePrecision ? 2 : 0)}%
                       </div>
                     </div>
                   </div>

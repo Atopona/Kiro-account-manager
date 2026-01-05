@@ -258,6 +258,12 @@ The project is configured with GitHub Actions workflow for auto building all pla
 
 ## 📋 Changelog
 
+### v1.3.2 (2025-01-02)
+- 🔄 **Auto Refresh Timer Fix**: Fixed the issue where auto refresh timer did not check account info when token is not expired
+- 🔄 **Background Refresh Update Fix**: Fixed the issue where background refresh results were not updating account panel data
+- 📊 **Batch Check Fix**: Fixed the issue where batch account check was not updating usage progress bar and subscription expiry time
+- 🎯 **Percentage Precision**: Usage percentage display is now also controlled by "Usage Precision" setting
+
 ### v1.3.1 (2025-01-01)
 - 🔧 **Check Account Button Fix**: Fixed the issue where clicking "Check Account Info" button had no visual feedback
 - 🔄 **Auto Refresh Sync Fix**: Fixed the issue where "Sync Account Info" setting was not working during auto refresh
