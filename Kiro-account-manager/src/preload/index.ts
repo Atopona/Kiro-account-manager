@@ -261,13 +261,13 @@ const api = {
   },
 
   // 启动 Social Auth 登录 (Google/GitHub)
-  startSocialLogin: (provider: 'Google' | 'Github'): Promise<{
+  startSocialLogin: (provider: 'Google' | 'Github', usePrivateMode?: boolean): Promise<{
     success: boolean
     loginUrl?: string
     state?: string
     error?: string
   }> => {
-    return ipcRenderer.invoke('start-social-login', provider)
+    return ipcRenderer.invoke('start-social-login', provider, usePrivateMode)
   },
 
   // 交换 Social Auth token

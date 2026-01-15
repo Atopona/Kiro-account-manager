@@ -96,6 +96,119 @@ function applyProxySettings(enabled: boolean, url: string): void {
   }
 }
 
+// ============ 隐私模式打开浏览器 ============
+import { exec, execSync } from 'child_process'
+
+// 获取 Windows 默认浏览器
+function getWindowsDefaultBrowser(): string {
+  try {
+    // 从注册表读取默认浏览器
+    const progId = execSync(
+      'reg query "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice" /v ProgId',
+      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+    )
+    
+    if (progId.includes('ChromeHTML') || progId.includes('Google')) return 'chrome'
+    if (progId.includes('MSEdgeHTM') || progId.includes('Edge')) return 'msedge'
+    if (progId.includes('FirefoxURL') || progId.includes('Firefox')) return 'firefox'
+    if (progId.includes('BraveHTML') || progId.includes('Brave')) return 'brave'
+    if (progId.includes('Opera')) return 'opera'
+    
+    return 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+// 使用隐私模式打开浏览器
+function openBrowserInPrivateMode(url: string): void {
+  const platform = process.platform
+  console.log(`[Browser] Opening in private mode on ${platform}: ${url}`)
+
+  try {
+    if (platform === 'win32') {
+      // Windows: 检测默认浏览器并使用对应的隐私模式参数
+      const defaultBrowser = getWindowsDefaultBrowser()
+      console.log(`[Browser] Detected default browser: ${defaultBrowser}`)
+      
+      let command = ''
+      switch (defaultBrowser) {
+        case 'chrome':
+          command = `start chrome --incognito "${url}"`
+          break
+        case 'msedge':
+          command = `start msedge -inprivate "${url}"`
+          break
+        case 'firefox':
+          command = `start firefox -private-window "${url}"`
+          break
+        case 'brave':
+          command = `start brave --incognito "${url}"`
+          break
+        case 'opera':
+          command = `start opera --private "${url}"`
+          break
+        default:
+          // 未知浏览器，尝试常见浏览器
+          console.log('[Browser] Unknown default browser, trying common browsers...')
+          exec(`start chrome --incognito "${url}"`, (err) => {
+            if (err) {
+              exec(`start msedge -inprivate "${url}"`, (err2) => {
+                if (err2) {
+                  exec(`start firefox -private-window "${url}"`, (err3) => {
+                    if (err3) {
+                      console.log('[Browser] Fallback to default browser (non-private)')
+                      shell.openExternal(url)
+                    }
+                  })
+                }
+              })
+            }
+          })
+          return
+      }
+      
+      exec(command, (err) => {
+        if (err) {
+          console.log(`[Browser] Failed to open ${defaultBrowser}, fallback to default`)
+          shell.openExternal(url)
+        }
+      })
+    } else if (platform === 'darwin') {
+      // macOS: 尝试 Chrome -> Firefox -> 默认浏览器
+      exec(`open -na "Google Chrome" --args --incognito "${url}"`, (err) => {
+        if (err) {
+          exec(`open -a Firefox --args -private-window "${url}"`, (err2) => {
+            if (err2) {
+              console.log('[Browser] Fallback to default browser')
+              shell.openExternal(url)
+            }
+          })
+        }
+      })
+    } else {
+      // Linux: 尝试 Chrome -> Chromium -> Firefox
+      exec(`google-chrome --incognito "${url}"`, (err) => {
+        if (err) {
+          exec(`chromium --incognito "${url}"`, (err2) => {
+            if (err2) {
+              exec(`firefox -private-window "${url}"`, (err3) => {
+                if (err3) {
+                  console.log('[Browser] Fallback to default browser')
+                  shell.openExternal(url)
+                }
+              })
+            }
+          })
+        }
+      })
+    }
+  } catch (error) {
+    console.error('[Browser] Error opening in private mode:', error)
+    shell.openExternal(url)
+  }
+}
+
 // IdC (BuilderId) 的 OIDC Token 刷新
 async function refreshOidcToken(
   refreshToken: string,
@@ -2484,8 +2597,8 @@ app.whenReady().then(() => {
   })
 
   // IPC: 启动 Social Auth 登录 (Google/GitHub)
-  ipcMain.handle('start-social-login', async (_event, provider: 'Google' | 'Github') => {
-    console.log(`[Login] Starting ${provider} Social Auth login...`)
+  ipcMain.handle('start-social-login', async (_event, provider: 'Google' | 'Github', usePrivateMode?: boolean) => {
+    console.log(`[Login] Starting ${provider} Social Auth login... (privateMode: ${usePrivateMode})`)
     
     const crypto = await import('crypto')
 
@@ -2512,12 +2625,19 @@ app.whenReady().then(() => {
       provider
     }
 
+    const urlStr = loginUrl.toString()
     console.log(`[Login] Opening browser for ${provider} login...`)
-    shell.openExternal(loginUrl.toString())
+
+    // 根据是否使用隐私模式选择打开方式
+    if (usePrivateMode) {
+      openBrowserInPrivateMode(urlStr)
+    } else {
+      shell.openExternal(urlStr)
+    }
 
     return {
       success: true,
-      loginUrl: loginUrl.toString(),
+      loginUrl: urlStr,
       state: oauthState
     }
   })

@@ -1,6 +1,6 @@
 import { useAccountsStore } from '@/store/accounts'
 import { Card, CardContent, CardHeader, CardTitle, Button } from '../ui'
-import { Eye, EyeOff, RefreshCw, Clock, Trash2, Download, Upload, Globe, Repeat, Palette, Moon, Sun, Fingerprint, Info, ChevronDown, ChevronUp, Settings, Database, Layers } from 'lucide-react'
+import { Eye, EyeOff, RefreshCw, Clock, Trash2, Download, Upload, Globe, Repeat, Palette, Moon, Sun, Fingerprint, Info, ChevronDown, ChevronUp, Settings, Database, Layers, UserX } from 'lucide-react'
 import { useState } from 'react'
 import { ExportDialog } from '../accounts/ExportDialog'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -127,6 +127,8 @@ export function SettingsPage() {
     setAutoSwitch,
     batchImportConcurrency,
     setBatchImportConcurrency,
+    loginPrivateMode,
+    setLoginPrivateMode,
     theme,
     darkMode,
     setTheme,
@@ -356,6 +358,20 @@ export function SettingsPage() {
               onClick={() => setUsagePrecision(!usagePrecision)}
             >
               {usagePrecision ? (isEn ? 'Decimal' : '小数') : (isEn ? 'Integer' : '整数')}
+            </Button>
+          </div>
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div>
+              <p className="font-medium">{isEn ? 'Login Private Mode' : '登录隐私模式'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Open browser in incognito/private mode when logging in' : '在线登录时使用浏览器无痕/隐私模式打开'}</p>
+            </div>
+            <Button
+              variant={loginPrivateMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => setLoginPrivateMode(!loginPrivateMode)}
+            >
+              <UserX className="h-4 w-4 mr-2" />
+              {loginPrivateMode ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
             </Button>
           </div>
         </CardContent>

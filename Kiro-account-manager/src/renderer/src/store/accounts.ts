@@ -80,6 +80,9 @@ interface AccountsState {
   // 批量导入设置
   batchImportConcurrency: number // 批量导入并发数
 
+  // 登录浏览器隐私模式
+  loginPrivateMode: boolean // 登录时使用浏览器隐私/无痕模式
+
   // 主题设置
   theme: string // 主题名称: default, purple, emerald, orange, rose, cyan, amber
   darkMode: boolean // 深色模式
@@ -194,6 +197,10 @@ interface AccountsActions {
 
   // 批量导入并发数
   setBatchImportConcurrency: (concurrency: number) => void
+
+  // 登录浏览器隐私模式
+  setLoginPrivateMode: (enabled: boolean) => void
+
   startAutoSwitch: () => void
   stopAutoSwitch: () => void
   checkAndAutoSwitch: () => Promise<void>
@@ -259,6 +266,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   autoSwitchThreshold: 0,
   autoSwitchInterval: 5,
   batchImportConcurrency: 100,
+  loginPrivateMode: false,
   theme: 'default',
   darkMode: false,
   language: 'auto',
@@ -1579,6 +1587,11 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
   setBatchImportConcurrency: (concurrency) => {
     set({ batchImportConcurrency: Math.max(1, Math.min(500, concurrency)) })
+    get().saveToStorage()
+  },
+
+  setLoginPrivateMode: (enabled) => {
+    set({ loginPrivateMode: enabled })
     get().saveToStorage()
   },
 

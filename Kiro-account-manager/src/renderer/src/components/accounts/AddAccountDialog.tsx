@@ -3,7 +3,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle } from '../ui'
 import { useAccountsStore } from '@/store/accounts'
 import { useTranslation } from '@/hooks/useTranslation'
 import type { SubscriptionType } from '@/types/account'
-import { X, Loader2, Download, Copy, Check, ExternalLink, Info } from 'lucide-react'
+import { X, Loader2, Download, Copy, Check, ExternalLink, Info, EyeOff } from 'lucide-react'
 
 interface AddAccountDialogProps {
   isOpen: boolean
@@ -60,7 +60,7 @@ type ImportMode = 'oidc' | 'sso' | 'login'
 type LoginType = 'builderid' | 'google' | 'github'
 
 export function AddAccountDialog({ isOpen, onClose }: AddAccountDialogProps): React.ReactNode {
-  const { addAccount, accounts, batchImportConcurrency } = useAccountsStore()
+  const { addAccount, accounts, batchImportConcurrency, loginPrivateMode } = useAccountsStore()
 
   // 检查账户是否已存在（同邮箱+同provider 或 同userId 才算重复）
   const isAccountExists = (email: string, userId: string, provider?: string): boolean => {
@@ -106,6 +106,7 @@ export function AddAccountDialog({ isOpen, onClose }: AddAccountDialogProps): Re
   // 登录相关状态
   const [loginType, setLoginType] = useState<LoginType>('builderid')
   const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [usePrivateMode, setUsePrivateMode] = useState(loginPrivateMode) // 临时隐私模式开关，默认跟随全局设置
   const [builderIdLoginData, setBuilderIdLoginData] = useState<{
     userCode: string
     verificationUri: string
@@ -357,7 +358,7 @@ export function AddAccountDialog({ isOpen, onClose }: AddAccountDialogProps): Re
     setError(null)
 
     try {
-      const result = await window.api.startSocialLogin(socialProvider)
+      const result = await window.api.startSocialLogin(socialProvider, usePrivateMode)
       
       if (!result.success) {
         setError(result.error || '启动登录失败')
@@ -971,6 +972,37 @@ export function AddAccountDialog({ isOpen, onClose }: AddAccountDialogProps): Re
                     <p className="text-sm text-muted-foreground mt-1">
                       {isEn ? 'Multiple quick login options' : '支持多种方式快捷登录'}
                     </p>
+                  </div>
+
+                  {/* 隐私模式选项 */}
+                  <div className="px-2">
+                    <button
+                      type="button"
+                      onClick={() => setUsePrivateMode(!usePrivateMode)}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all duration-200 ${
+                        usePrivateMode 
+                          ? 'bg-primary/5 border-primary/30 hover:bg-primary/10' 
+                          : 'bg-muted/30 border-transparent hover:bg-muted/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                          usePrivateMode ? 'bg-primary/20' : 'bg-muted'
+                        }`}>
+                          <EyeOff className={`w-4 h-4 ${usePrivateMode ? 'text-primary' : 'text-muted-foreground'}`} />
+                        </div>
+                        <span className={`text-sm font-medium ${usePrivateMode ? 'text-foreground' : 'text-muted-foreground'}`}>
+                          {isEn ? 'Private/Incognito Mode' : '隐私/无痕模式'}
+                        </span>
+                      </div>
+                      <div className={`w-10 h-6 rounded-full p-1 transition-colors ${
+                        usePrivateMode ? 'bg-primary' : 'bg-muted-foreground/30'
+                      }`}>
+                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+                          usePrivateMode ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </div>
+                    </button>
                   </div>
                   
                   <div className="space-y-3 px-2">
