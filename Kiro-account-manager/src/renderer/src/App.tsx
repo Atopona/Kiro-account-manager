@@ -1,9 +1,14 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { AccountManager } from './components/accounts'
 import { Sidebar, type PageType } from './components/layout'
 import { HomePage, AboutPage, SettingsPage, MachineIdPage, KiroSettingsPage, ProxyPage } from './components/pages'
 import { UpdateDialog } from './components/UpdateDialog'
+import { ToastContainer } from './components/ui'
 import { useAccountsStore } from './store/accounts'
+import { useToast } from './hooks/useToast'
+
+// 创建全局Toast上下文
+export const ToastContext = React.createContext<ReturnType<typeof useToast> | null>(null)
 
 function App(): React.JSX.Element {
   const [currentPage, setCurrentPage] = useState<PageType>('home')
@@ -11,7 +16,8 @@ function App(): React.JSX.Element {
   const [isInitializing, setIsInitializing] = useState(true)
   const [initError, setInitError] = useState<string | null>(null)
   
-  const { loadFromStorage, startAutoTokenRefresh, stopAutoTokenRefresh, handleBackgroundRefreshResult, handleBackgroundCheckResult } = useAccountsStore()
+  const toast = useToast()
+  const { loadFromStorage, startAutoTokenRefresh, cleanup, handleBackgroundRefreshResult, handleBackgroundCheckResult } = useAccountsStore()
   
   // 应用启动时加载数据并启动自动刷新
   useEffect(() => {
@@ -23,19 +29,24 @@ function App(): React.JSX.Element {
         startAutoTokenRefresh()
         console.log('[App] Auto token refresh started')
         setIsInitializing(false)
+        toast.success('应用启动成功', 'Application initialized successfully')
       } catch (error) {
         console.error('[App] Failed to initialize:', error)
-        setInitError(error instanceof Error ? error.message : '应用初始化失败')
+        const errorMsg = error instanceof Error ? error.message : '应用初始化失败'
+        setInitError(errorMsg)
         setIsInitializing(false)
+        toast.error('初始化失败', errorMsg)
       }
     }
     
     initApp()
     
+    // 清理函数：应用卸载时清理所有定时器
     return () => {
-      stopAutoTokenRefresh()
+      console.log('[App] Cleaning up resources...')
+      cleanup()
     }
-  }, [loadFromStorage, startAutoTokenRefresh, stopAutoTokenRefresh])
+  }, [loadFromStorage, startAutoTokenRefresh, cleanup, toast])
 
   // 监听后台刷新结果
   useEffect(() => {
@@ -110,18 +121,21 @@ function App(): React.JSX.Element {
   }
 
   return (
-    <div className="h-screen bg-background flex">
-      <Sidebar
-        currentPage={currentPage}
-        onPageChange={setCurrentPage}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-      />
-      <main className="flex-1 overflow-auto">
-        {renderPage()}
-      </main>
-      <UpdateDialog />
-    </div>
+    <ToastContext.Provider value={toast}>
+      <div className="h-screen bg-background flex">
+        <Sidebar
+          currentPage={currentPage}
+          onPageChange={setCurrentPage}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
+        <main className="flex-1 overflow-auto">
+          {renderPage()}
+        </main>
+        <UpdateDialog />
+        <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
+      </div>
+    </ToastContext.Provider>
   )
 }
 

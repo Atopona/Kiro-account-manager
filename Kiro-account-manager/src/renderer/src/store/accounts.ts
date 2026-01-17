@@ -32,6 +32,23 @@ let autoSaveTimer: ReturnType<typeof setInterval> | null = null
 const AUTO_SAVE_INTERVAL = 30 * 1000 // 每 30 秒自动保存一次
 let lastSaveHash = '' // 用于检测数据是否变化
 
+// 清理所有定时器（应用退出时调用）
+export function cleanupTimers(): void {
+  if (tokenRefreshTimer) {
+    clearInterval(tokenRefreshTimer)
+    tokenRefreshTimer = null
+  }
+  if (autoSwitchTimer) {
+    clearInterval(autoSwitchTimer)
+    autoSwitchTimer = null
+  }
+  if (autoSaveTimer) {
+    clearInterval(autoSaveTimer)
+    autoSaveTimer = null
+  }
+  console.log('[Store] All timers cleaned up')
+}
+
 interface AccountsState {
   // 应用版本号
   appVersion: string
@@ -2366,3 +2383,16 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     get().saveToStorage()
   }
 }))
+,
+
+  // 清理资源（应用退出时调用）
+  cleanup: () => {
+    get().stopAutoTokenRefresh()
+    get().stopAutoSwitch()
+    get().stopAutoSave()
+    console.log('[Store] Cleanup completed')
+  }
+}))
+
+// 导出清理函数供外部调用
+export { cleanupTimers }

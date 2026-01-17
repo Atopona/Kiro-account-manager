@@ -338,6 +338,7 @@ export class ProxyServer {
   ): Promise<{ result: T; account: ProxyAccount }> {
     const maxRetries = this.config.maxRetries || 3
     const retryDelay = this.config.retryDelayMs || 1000
+    const ENDPOINT_COUNT = 2 // CodeWhisperer 和 AmazonQ 两个端点
     let lastError: Error | null = null
     let currentAccount = account
     let endpointIndex = 0
@@ -372,7 +373,7 @@ export class ProxyServer {
         if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('ThrottlingException')) {
           console.log('[ProxyServer] Quota/throttle error, switching endpoint or account')
           this.accountPool.recordError(currentAccount.id, true)
-          endpointIndex = (endpointIndex + 1) % 2 // 切换端点
+          endpointIndex = (endpointIndex + 1) % ENDPOINT_COUNT // 动态使用端点数量
           if (endpointIndex === 0) {
             // 已尝试所有端点，切换账号
             const nextAccount = this.accountPool.getNextAccount()

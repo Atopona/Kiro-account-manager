@@ -1,8 +1,10 @@
-import { memo, useState, useMemo } from 'react'
-import { createPortal } from 'react-dom'
+import { memo, useState, useMemo, useContext } from 'react'
 import { Card, CardContent, Badge, Button, Progress } from '../ui'
 import { useAccountsStore } from '@/store/accounts'
 import { useTranslation } from '@/hooks/useTranslation'
+import { ToastContext } from '@/App'
+import { SubscriptionDialog } from './SubscriptionDialog'
+import { BanDialog } from './BanDialog'
 import type { Account, AccountTag, AccountGroup } from '@/types/account'
 import {
   Check,
@@ -18,11 +20,7 @@ import {
   Power,
   Calendar,
   AlertCircle,
-  KeyRound,
-  X,
-  ExternalLink,
-  CreditCard,
-  Sparkles
+  KeyRound
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -154,6 +152,7 @@ export const AccountCard = memo(function AccountCard({
 
   const { t } = useTranslation()
   const isEn = t('common.unknown') === 'Unknown'
+  const toast = useContext(ToastContext)
 
   // 格式化使用量数值
   const formatUsage = (value: number): string => {
@@ -168,11 +167,17 @@ export const AccountCard = memo(function AccountCard({
     
     // 社交登录只需要 refreshToken，IdC 登录需要 clientId 和 clientSecret
     if (!credentials.refreshToken) {
-      alert(isEn ? 'Incomplete credentials, cannot switch' : '账号凭证不完整，无法切换')
+      toast?.error(
+        isEn ? 'Cannot Switch Account' : '无法切换账号',
+        isEn ? 'Incomplete credentials' : '账号凭证不完整'
+      )
       return
     }
     if (credentials.authMethod !== 'social' && (!credentials.clientId || !credentials.clientSecret)) {
-      alert(isEn ? 'Incomplete credentials, cannot switch' : '账号凭证不完整，无法切换')
+      toast?.error(
+        isEn ? 'Cannot Switch Account' : '无法切换账号',
+        isEn ? 'Incomplete credentials' : '账号凭证不完整'
+      )
       return
     }
     
@@ -189,21 +194,43 @@ export const AccountCard = memo(function AccountCard({
     
     if (result.success) {
       setActiveAccount(account.id)
+      toast?.success(
+        isEn ? 'Account Switched' : '账号已切换',
+        isEn ? `Switched to ${maskEmail(account.email)}` : `已切换到 ${maskEmail(account.email)}`
+      )
     } else {
-      alert(isEn ? `Switch failed: ${result.error}` : `切换失败: ${result.error}`)
+      toast?.error(
+        isEn ? 'Switch Failed' : '切换失败',
+        result.error
+      )
     }
   }
 
   const handleRefresh = async (): Promise<void> => {
     // 获取最新的使用量数据
     await checkAccountStatus(account.id)
+    toast?.success(
+      isEn ? 'Refreshed' : '已刷新',
+      isEn ? 'Account info updated' : '账户信息已更新'
+    )
   }
 
   const [isRefreshingToken, setIsRefreshingToken] = useState(false)
   const handleRefreshToken = async (): Promise<void> => {
     setIsRefreshingToken(true)
     try {
-      await refreshAccountToken(account.id)
+      const success = await refreshAccountToken(account.id)
+      if (success) {
+        toast?.success(
+          isEn ? 'Token Refreshed' : 'Token已刷新',
+          isEn ? 'Access token updated successfully' : '访问令牌已成功更新'
+        )
+      } else {
+        toast?.error(
+          isEn ? 'Refresh Failed' : '刷新失败',
+          isEn ? 'Failed to refresh token' : 'Token刷新失败'
+        )
+      }
     } finally {
       setIsRefreshingToken(false)
     }
@@ -212,6 +239,10 @@ export const AccountCard = memo(function AccountCard({
   const handleDelete = (): void => {
     if (confirm(isEn ? `Delete account ${maskEmail(account.email)}?` : `确定要删除账号 ${maskEmail(account.email)} 吗？`)) {
       removeAccount(account.id)
+      toast?.success(
+        isEn ? 'Account Deleted' : '账号已删除',
+        isEn ? `${maskEmail(account.email)} has been removed` : `${maskEmail(account.email)} 已被移除`
+      )
     }
   }
 
@@ -227,6 +258,10 @@ export const AccountCard = memo(function AccountCard({
     navigator.clipboard.writeText(JSON.stringify(credentials, null, 2))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+    toast?.success(
+      isEn ? 'Copied' : '已复制',
+      isEn ? 'Credentials copied to clipboard' : '凭证已复制到剪贴板'
+    )
   }
 
   const accountTags = account.tags
@@ -256,110 +291,6 @@ export const AccountCard = memo(function AccountCard({
   
   // 订阅管理弹窗状态
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false)
-  const [subscriptionLoading, setSubscriptionLoading] = useState(false)
-  const [subscriptionPlans, setSubscriptionPlans] = useState<Array<{
-    name: string
-    qSubscriptionType: string
-    description: { title: string; billingInterval: string; featureHeader: string; features: string[] }
-    pricing: { amount: number; currency: string }
-  }>>([])
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
-  const [paymentLoading, setPaymentLoading] = useState(false)
-
-  // 是否为首次用户（需要选择订阅类型）
-  const [isFirstTimeUser, setIsFirstTimeUser] = useState(false)
-  // 订阅错误信息
-  const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
-  // 订阅成功提示
-  const [subscriptionSuccess, setSubscriptionSuccess] = useState<string | null>(null)
-
-  // 点击订阅标签打开订阅管理
-  const handleSubscriptionClick = async (e: React.MouseEvent): Promise<void> => {
-    e.stopPropagation()
-    if (subscriptionLoading || !account.credentials?.accessToken) return
-    
-    setSubscriptionLoading(true)
-    try {
-      // 统一先获取可用订阅列表
-      const result = await window.api.accountGetSubscriptions(account.credentials.accessToken)
-      if (result.success && result.plans.length > 0) {
-        setSubscriptionPlans(result.plans)
-        // 检查是否是首次用户（当前订阅类型为 FREE 或无订阅）
-        const currentType = account.subscription?.type?.toUpperCase() || ''
-        const isFirstTime = currentType === '' || currentType.includes('FREE')
-        setIsFirstTimeUser(isFirstTime)
-        setShowSubscriptionDialog(true)
-      } else {
-        console.error('[AccountCard] Failed to get subscriptions:', result.error)
-      }
-    } catch (error) {
-      console.error('[AccountCard] Subscription click error:', error)
-    } finally {
-      setSubscriptionLoading(false)
-    }
-  }
-
-  // 选择订阅计划并获取支付链接
-  const handleSelectPlan = async (planName: string): Promise<void> => {
-    if (paymentLoading || !account.credentials?.accessToken) return
-    
-    setSelectedPlan(planName)
-    setPaymentLoading(true)
-    setSubscriptionError(null)
-    try {
-      const result = await window.api.accountGetSubscriptionUrl(account.credentials.accessToken, planName)
-      if (result.success && result.url) {
-        // 自动复制链接到剪贴板
-        await navigator.clipboard.writeText(result.url)
-        // 显示复制成功提示
-        setSubscriptionSuccess(isEn ? 'Link copied to clipboard!' : '链接已复制到剪贴板！')
-        // 短暂显示后关闭弹窗并打开链接
-        const urlToOpen = result.url
-        setTimeout(async () => {
-          setShowSubscriptionDialog(false)
-          setSubscriptionSuccess(null)
-          await window.api.openSubscriptionWindow(urlToOpen)
-        }, 800)
-      } else {
-        const errorMsg = result.error || (isEn ? 'Failed to get payment URL' : '获取支付链接失败')
-        setSubscriptionError(errorMsg)
-        console.error('[AccountCard] Failed to get payment URL:', result.error)
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : (isEn ? 'Unknown error' : '未知错误')
-      setSubscriptionError(errorMsg)
-      console.error('[AccountCard] Payment URL error:', error)
-    } finally {
-      setPaymentLoading(false)
-      setSelectedPlan(null)
-    }
-  }
-
-  // 获取订阅管理链接（已有订阅用户）
-  const handleManageSubscription = async (): Promise<void> => {
-    if (paymentLoading || !account.credentials?.accessToken) return
-    
-    setPaymentLoading(true)
-    setSubscriptionError(null)
-    try {
-      const result = await window.api.accountGetSubscriptionUrl(account.credentials.accessToken)
-      if (result.success && result.url) {
-        setShowSubscriptionDialog(false)
-        await window.api.openSubscriptionWindow(result.url)
-      } else {
-        // 显示错误信息
-        const errorMsg = result.error || (isEn ? 'Failed to get management URL' : '获取管理链接失败')
-        setSubscriptionError(errorMsg)
-        console.error('[AccountCard] Failed to get management URL:', result.error)
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : (isEn ? 'Unknown error' : '未知错误')
-      setSubscriptionError(errorMsg)
-      console.error('[AccountCard] Management URL error:', error)
-    } finally {
-      setPaymentLoading(false)
-    }
-  }
 
   // 封禁状态样式（红色）- 优先级最高
   const unauthorizedStyle: React.CSSProperties = isUnauthorized ? {
