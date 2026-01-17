@@ -2381,9 +2381,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   clearMachineIdHistory: () => {
     set({ machineIdHistory: [] })
     get().saveToStorage()
-  }
-}))
-,
+  },
 
   // 清理资源（应用退出时调用）
   cleanup: () => {
