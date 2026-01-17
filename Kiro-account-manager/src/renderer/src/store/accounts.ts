@@ -248,6 +248,9 @@ interface AccountsActions {
   getMachineIdForAccount: (accountId: string) => string | null
   backupOriginalMachineId: () => void
   clearMachineIdHistory: () => void
+  
+  // 清理资源
+  cleanup: () => void
 }
 
 type AccountsStore = AccountsState & AccountsActions
@@ -2391,6 +2394,3 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     console.log('[Store] Cleanup completed')
   }
 }))
-
-// 导出清理函数供外部调用
-export { cleanupTimers }

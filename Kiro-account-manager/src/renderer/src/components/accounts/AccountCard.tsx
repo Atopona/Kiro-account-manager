@@ -1,10 +1,9 @@
 import { memo, useState, useMemo, useContext } from 'react'
+import { createPortal } from 'react-dom'
 import { Card, CardContent, Badge, Button, Progress } from '../ui'
 import { useAccountsStore } from '@/store/accounts'
 import { useTranslation } from '@/hooks/useTranslation'
 import { ToastContext } from '@/App'
-import { SubscriptionDialog } from './SubscriptionDialog'
-import { BanDialog } from './BanDialog'
 import type { Account, AccountTag, AccountGroup } from '@/types/account'
 import {
   Check,
@@ -20,7 +19,9 @@ import {
   Power,
   Calendar,
   AlertCircle,
-  KeyRound
+  KeyRound,
+  X,
+  ExternalLink
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -401,14 +402,12 @@ export const AccountCard = memo(function AccountCard({
         <div className="flex items-center gap-2 flex-wrap">
             <Badge 
               className={cn(
-                'text-white text-[10px] h-5 px-2 border-0 cursor-pointer transition-all hover:opacity-80 hover:scale-105',
-                getSubscriptionColor(account.subscription?.type || 'Free', account.subscription?.title),
-                subscriptionLoading && 'opacity-60 cursor-wait'
+                'text-white text-[10px] h-5 px-2 border-0',
+                getSubscriptionColor(account.subscription?.type || 'Free', account.subscription?.title)
               )}
-              onClick={handleSubscriptionClick}
-              title={isEn ? 'Click to manage subscription' : '点击管理订阅'}
+              title={account.subscription?.title || account.subscription?.type || 'Free'}
             >
-                {subscriptionLoading ? (isEn ? 'Loading...' : '加载中...') : (account.subscription?.title || account.subscription?.type || 'Free')}
+                {account.subscription?.title || account.subscription?.type || 'Free'}
             </Badge>
             <Badge variant="outline" className="text-[10px] h-5 px-2 text-muted-foreground font-normal border-muted-foreground/30 bg-muted/30">
                 {account.idp}
@@ -744,4 +743,5 @@ export const AccountCard = memo(function AccountCard({
       )}
     </Card>
   )
+})
 })
