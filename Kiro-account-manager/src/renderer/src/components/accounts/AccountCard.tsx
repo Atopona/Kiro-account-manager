@@ -744,4 +744,3 @@ export const AccountCard = memo(function AccountCard({
     </Card>
   )
 })
-})
