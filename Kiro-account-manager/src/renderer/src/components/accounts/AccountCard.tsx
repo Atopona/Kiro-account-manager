@@ -242,8 +242,8 @@ export const AccountCard = memo(function AccountCard({
     return generateGlowStyle(tagColors)
   }, [accountTags])
 
-  const isExpiringSoon = account.subscription.daysRemaining !== undefined &&
-                         account.subscription.daysRemaining <= 7
+  const isExpiringSoon = account.subscription?.daysRemaining !== undefined &&
+                         account.subscription?.daysRemaining <= 7
 
   const isHighUsage = account.usage.percentUsed > 80
 
@@ -285,7 +285,7 @@ export const AccountCard = memo(function AccountCard({
       if (result.success && result.plans.length > 0) {
         setSubscriptionPlans(result.plans)
         // 检查是否是首次用户（当前订阅类型为 FREE 或无订阅）
-        const currentType = account.subscription.type?.toUpperCase() || ''
+        const currentType = account.subscription?.type?.toUpperCase() || ''
         const isFirstTime = currentType === '' || currentType.includes('FREE')
         setIsFirstTimeUser(isFirstTime)
         setShowSubscriptionDialog(true)
@@ -471,13 +471,13 @@ export const AccountCard = memo(function AccountCard({
             <Badge 
               className={cn(
                 'text-white text-[10px] h-5 px-2 border-0 cursor-pointer transition-all hover:opacity-80 hover:scale-105',
-                getSubscriptionColor(account.subscription.type, account.subscription.title),
+                getSubscriptionColor(account.subscription?.type || 'Free', account.subscription?.title),
                 subscriptionLoading && 'opacity-60 cursor-wait'
               )}
               onClick={handleSubscriptionClick}
               title={isEn ? 'Click to manage subscription' : '点击管理订阅'}
             >
-                {subscriptionLoading ? (isEn ? 'Loading...' : '加载中...') : (account.subscription.title || account.subscription.type)}
+                {subscriptionLoading ? (isEn ? 'Loading...' : '加载中...') : (account.subscription?.title || account.subscription?.type || 'Free')}
             </Badge>
             <Badge variant="outline" className="text-[10px] h-5 px-2 text-muted-foreground font-normal border-muted-foreground/30 bg-muted/30">
                 {account.idp}
@@ -589,7 +589,7 @@ export const AccountCard = memo(function AccountCard({
                 <div className="flex items-center gap-1">
                    <Clock className="h-3 w-3" />
                    <span className={isExpiringSoon ? "text-amber-600 font-medium" : ""}>
-                      {account.subscription.daysRemaining !== undefined ? (isEn ? `${account.subscription.daysRemaining}d left` : `剩 ${account.subscription.daysRemaining} 天`) : '-'}
+                      {account.subscription?.daysRemaining !== undefined ? (isEn ? `${account.subscription?.daysRemaining}d left` : `剩 ${account.subscription?.daysRemaining} 天`) : '-'}
                    </span>
                 </div>
                 <div className="flex items-center gap-1" title={account.credentials.expiresAt ? new Date(account.credentials.expiresAt).toLocaleString(isEn ? 'en-US' : 'zh-CN') : (isEn ? 'Unknown' : '未知')}>
@@ -716,7 +716,7 @@ export const AccountCard = memo(function AccountCard({
               ) : (
                 <div className="text-xs text-muted-foreground mb-2">
                   {isEn ? 'Current subscription: ' : '当前订阅: '}
-                  <span className="font-medium text-foreground">{account.subscription.title || account.subscription.type}</span>
+                  <span className="font-medium text-foreground">{account.subscription?.title || account.subscription?.type || 'Free'}</span>
                 </div>
               )}
               
@@ -736,7 +736,7 @@ export const AccountCard = memo(function AccountCard({
               
               <div className="grid grid-cols-2 gap-3">
                 {subscriptionPlans.map((plan) => {
-                  const isCurrent = plan.name === account.subscription.type || plan.description.title === account.subscription.title
+                  const isCurrent = plan.name === account.subscription?.type || plan.description.title === account.subscription?.title
                   const isLoading = paymentLoading && selectedPlan === plan.qSubscriptionType
                   return (
                     <div

@@ -259,7 +259,7 @@ export function HomePage() {
                 <p className="text-xs text-muted-foreground">{isEn ? 'Subscription' : '订阅剩余'}</p>
                 <p className="text-sm font-medium">
                   {activeAccount.subscription?.daysRemaining != null 
-                    ? (isEn ? `${activeAccount.subscription.daysRemaining} days` : `${activeAccount.subscription.daysRemaining} 天`)
+                    ? (isEn ? `${activeAccount.subscription?.daysRemaining} days` : `${activeAccount.subscription?.daysRemaining} 天`)
                     : (isEn ? 'Permanent' : '永久')}
                 </p>
               </div>
@@ -302,25 +302,25 @@ export function HomePage() {
                 {activeAccount.subscription?.rawType && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">{isEn ? 'Raw Type:' : '原始类型:'}</span>
-                    <span className="font-mono text-[10px]">{activeAccount.subscription.rawType}</span>
+                    <span className="font-mono text-[10px]">{activeAccount.subscription?.rawType}</span>
                   </div>
                 )}
                 {activeAccount.subscription?.expiresAt && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">{isEn ? 'Expires:' : '到期时间:'}</span>
-                    <span className="font-medium">{new Date(activeAccount.subscription.expiresAt).toLocaleDateString('zh-CN')}</span>
+                    <span className="font-medium">{new Date(activeAccount.subscription?.expiresAt).toLocaleDateString('zh-CN')}</span>
                   </div>
                 )}
                 {activeAccount.subscription?.upgradeCapability && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">{isEn ? 'Upgradeable:' : '可升级:'}</span>
-                    <span className="font-medium">{activeAccount.subscription.upgradeCapability}</span>
+                    <span className="font-medium">{activeAccount.subscription?.upgradeCapability}</span>
                   </div>
                 )}
                 {activeAccount.subscription?.overageCapability && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">{isEn ? 'Overage:' : '超额能力:'}</span>
-                    <span className="font-medium">{activeAccount.subscription.overageCapability}</span>
+                    <span className="font-medium">{activeAccount.subscription?.overageCapability}</span>
                   </div>
                 )}
               </div>

@@ -78,14 +78,14 @@ export function EditAccountDialog({
         email: account.email,
         userId: account.userId || '',
         accessToken: account.credentials.accessToken,
-        subscriptionType: account.subscription.type,
-        subscriptionTitle: account.subscription.title || account.subscription.type,
+        subscriptionType: account.subscription?.type || 'Free',
+        subscriptionTitle: account.subscription?.title || account.subscription?.type || 'Free',
         usage: {
           current: account.usage?.current || 0,
           limit: account.usage?.limit || 0
         },
-        daysRemaining: account.subscription.daysRemaining,
-        expiresAt: account.subscription.expiresAt
+        daysRemaining: account.subscription?.daysRemaining,
+        expiresAt: account.subscription?.expiresAt
       })
       setError(null)
     }

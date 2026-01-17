@@ -1244,6 +1244,19 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
         let activeAccountId = data.activeAccountId ?? null
         console.log('[Store] Loaded', accounts.size, 'accounts')
 
+        // 数据迁移：确保所有账号都有 subscription 字段
+        for (const [id, account] of accounts) {
+          if (!account.subscription) {
+            console.warn(`[Store] Account ${id} missing subscription, adding default`)
+            accounts.set(id, {
+              ...account,
+              subscription: {
+                type: 'Free'
+              }
+            })
+          }
+        }
+
         // 同步本地 SSO 缓存中的账号状态
         try {
           const localResult = await window.api.getLocalActiveAccount()
