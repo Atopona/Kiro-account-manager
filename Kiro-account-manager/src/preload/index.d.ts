@@ -549,6 +549,32 @@ interface KiroApi {
 
   // 监听反代状态变化事件
   onProxyStatusChange: (callback: (status: { running: boolean; port: number }) => void) => () => void
+
+  // ============ API 管理 ============
+
+  // 保存 API 配置
+  saveApiConfig: (config: { url: string; apiKey: string }) => Promise<{ success: boolean; error?: string }>
+
+  // 获取 API 配置
+  getApiConfig: () => Promise<{ url: string; apiKey: string } | null>
+
+  // 测试 API 连接
+  testApiConnection: (url: string, apiKey?: string) => Promise<{ success: boolean; status?: number; data?: unknown; error?: string }>
+
+  // 同步账号到 API
+  syncAccountsToApi: (url: string, apiKey: string, accounts: Array<{
+    id: string
+    email?: string
+    accessToken: string
+    refreshToken?: string
+    clientId?: string
+    clientSecret?: string
+    region?: string
+    authMethod?: string
+    provider?: string
+    profileArn?: string
+    expiresAt?: number
+  }>) => Promise<{ success: boolean; status?: number; data?: unknown; error?: string }>
 }
 
 declare global {

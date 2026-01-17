@@ -21,6 +21,7 @@ export interface AccountCredentials {
   expiresAt: number      // 时间戳
   authMethod?: 'IdC' | 'social'  // 认证方式：IdC (BuilderId) 或 social (GitHub/Google)
   provider?: 'BuilderId' | 'Github' | 'Google'  // 身份提供商
+  profileArn?: string    // AWS Profile ARN（用于 API 调用）
 }
 
 /**

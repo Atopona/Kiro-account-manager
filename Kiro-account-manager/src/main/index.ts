@@ -3460,6 +3460,144 @@ app.whenReady().then(() => {
     }
   })
 
+  // ============ API 管理 IPC ============
+
+  // IPC: 保存 API 配置
+  ipcMain.handle('save-api-config', async (_event, config: { url: string; apiKey: string }) => {
+    try {
+      await initStore()
+      const configPath = join(app.getPath('userData'), 'api-config.json')
+      await writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8')
+      return { success: true }
+    } catch (error) {
+      console.error('[API Config] Save failed:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to save config' }
+    }
+  })
+
+  // IPC: 获取 API 配置
+  ipcMain.handle('get-api-config', async () => {
+    try {
+      await initStore()
+      const configPath = join(app.getPath('userData'), 'api-config.json')
+      const content = await readFile(configPath, 'utf-8')
+      return JSON.parse(content)
+    } catch (error) {
+      // 文件不存在是正常的
+      return null
+    }
+  })
+
+  // IPC: 测试 API 连接
+  ipcMain.handle('test-api-connection', async (_event, url: string, apiKey?: string) => {
+    try {
+      console.log('[API Test] Testing connection to:', url)
+      const headers: Record<string, string> = {}
+      if (apiKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`
+      }
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000)
+
+      const response = await fetch(`${url}/health`, {
+        method: 'GET',
+        headers,
+        signal: controller.signal
+      })
+
+      clearTimeout(timeoutId)
+
+      console.log('[API Test] Response status:', response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('[API Test] Failed:', response.status, errorText)
+        return {
+          success: false,
+          status: response.status,
+          error: `HTTP ${response.status}: ${errorText}`
+        }
+      }
+
+      const data = await response.json()
+      console.log('[API Test] Response data:', data)
+
+      return {
+        success: true,
+        status: response.status,
+        data
+      }
+    } catch (error) {
+      console.error('[API Test] Error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Connection failed'
+      }
+    }
+  })
+
+  // IPC: 同步账号到 API
+  ipcMain.handle('sync-accounts-to-api', async (_event, url: string, apiKey: string, accounts: Array<{
+    id: string
+    email?: string
+    accessToken: string
+    refreshToken?: string
+    clientId?: string
+    clientSecret?: string
+    region?: string
+    authMethod?: string
+    provider?: string
+    profileArn?: string
+    expiresAt?: number
+  }>) => {
+    try {
+      console.log('[API Sync] Syncing', accounts.length, 'accounts to:', url)
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000)
+
+      const response = await fetch(`${url}/admin/accounts/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({ accounts }),
+        signal: controller.signal
+      })
+
+      clearTimeout(timeoutId)
+
+      console.log('[API Sync] Response status:', response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('[API Sync] Failed:', response.status, errorText)
+        return {
+          success: false,
+          status: response.status,
+          error: `HTTP ${response.status}: ${errorText}`
+        }
+      }
+
+      const result = await response.json()
+      console.log('[API Sync] Result:', result)
+
+      return {
+        success: true,
+        status: response.status,
+        data: result
+      }
+    } catch (error) {
+      console.error('[API Sync] Error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Sync failed'
+      }
+    }
+  })
+
   // ============ MCP 服务器管理 IPC ============
 
   // IPC: 保存 MCP 服务器配置

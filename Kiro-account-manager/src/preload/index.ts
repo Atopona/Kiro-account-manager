@@ -638,6 +638,40 @@ const api = {
     return () => {
       ipcRenderer.removeListener('proxy-status-change', handler)
     }
+  },
+
+  // ============ API 管理 ============
+
+  // 保存 API 配置
+  saveApiConfig: (config: { url: string; apiKey: string }): Promise<{ success: boolean; error?: string }> => {
+    return ipcRenderer.invoke('save-api-config', config)
+  },
+
+  // 获取 API 配置
+  getApiConfig: (): Promise<{ url: string; apiKey: string } | null> => {
+    return ipcRenderer.invoke('get-api-config')
+  },
+
+  // 测试 API 连接
+  testApiConnection: (url: string, apiKey?: string): Promise<{ success: boolean; status?: number; data?: unknown; error?: string }> => {
+    return ipcRenderer.invoke('test-api-connection', url, apiKey)
+  },
+
+  // 同步账号到 API
+  syncAccountsToApi: (url: string, apiKey: string, accounts: Array<{
+    id: string
+    email?: string
+    accessToken: string
+    refreshToken?: string
+    clientId?: string
+    clientSecret?: string
+    region?: string
+    authMethod?: string
+    provider?: string
+    profileArn?: string
+    expiresAt?: number
+  }>): Promise<{ success: boolean; status?: number; data?: unknown; error?: string }> => {
+    return ipcRenderer.invoke('sync-accounts-to-api', url, apiKey, accounts)
   }
 }
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { AccountManager } from './components/accounts'
 import { Sidebar, type PageType } from './components/layout'
-import { HomePage, AboutPage, SettingsPage, MachineIdPage, KiroSettingsPage, ProxyPage } from './components/pages'
+import { HomePage, AboutPage, SettingsPage, MachineIdPage, KiroSettingsPage, ProxyPage, ApiManagePage } from './components/pages'
 import { UpdateDialog } from './components/UpdateDialog'
 import { ToastContainer } from './components/ui'
 import { useAccountsStore } from './store/accounts'
@@ -46,7 +46,8 @@ function App(): React.JSX.Element {
       console.log('[App] Cleaning up resources...')
       cleanup()
     }
-  }, [loadFromStorage, startAutoTokenRefresh, cleanup, toast])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 监听后台刷新结果
   useEffect(() => {
@@ -56,7 +57,8 @@ function App(): React.JSX.Element {
     return () => {
       unsubscribe()
     }
-  }, [handleBackgroundRefreshResult])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 监听后台检查结果
   useEffect(() => {
@@ -66,7 +68,8 @@ function App(): React.JSX.Element {
     return () => {
       unsubscribe()
     }
-  }, [handleBackgroundCheckResult])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const renderPage = () => {
     switch (currentPage) {
@@ -80,6 +83,8 @@ function App(): React.JSX.Element {
         return <KiroSettingsPage />
       case 'proxy':
         return <ProxyPage />
+      case 'apiManage':
+        return <ApiManagePage />
       case 'settings':
         return <SettingsPage />
       case 'about':

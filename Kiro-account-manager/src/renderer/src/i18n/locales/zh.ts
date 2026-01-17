@@ -47,6 +47,7 @@ const zh = {
     machineId: '机器码',
     kiroSettings: 'Kiro 设置',
     proxy: 'API 反代',
+    apiManage: 'API 管理',
     settings: '设置',
     about: '关于'
   },
