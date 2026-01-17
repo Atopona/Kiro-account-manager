@@ -1229,15 +1229,20 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     set({ isLoading: true })
 
     try {
+      console.log('[Store] Loading data from storage...')
+      
       // 获取应用版本号
       const appVersion = await window.api.getAppVersion()
       set({ appVersion })
+      console.log('[Store] App version:', appVersion)
 
       const data = await window.api.loadAccounts()
+      console.log('[Store] Loaded accounts data:', data ? 'success' : 'no data')
 
       if (data) {
         const accounts = new Map(Object.entries(data.accounts ?? {}) as [string, Account][])
         let activeAccountId = data.activeAccountId ?? null
+        console.log('[Store] Loaded', accounts.size, 'accounts')
 
         // 同步本地 SSO 缓存中的账号状态
         try {
@@ -1331,6 +1336,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
           }
         } catch (e) {
           console.warn('[Store] Failed to sync local active account:', e)
+          // 不抛出错误，继续加载
         }
 
         // 根据 activeAccountId 重新同步所有账号的 isActive 状态，确保只有一个账号为激活状态
@@ -1371,23 +1377,51 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
         })
 
         // 应用主题
-        get().applyTheme()
+        try {
+          get().applyTheme()
+        } catch (e) {
+          console.warn('[Store] Failed to apply theme:', e)
+        }
 
         // 如果代理已启用，通知主进程
-        if (data.proxyEnabled && data.proxyUrl) {
-          window.api.setProxy?.(true, data.proxyUrl)
+        try {
+          if (data.proxyEnabled && data.proxyUrl) {
+            window.api.setProxy?.(true, data.proxyUrl)
+          }
+        } catch (e) {
+          console.warn('[Store] Failed to set proxy:', e)
         }
 
         // 如果自动换号已启用，启动定时器
-        if (data.autoSwitchEnabled) {
-          get().startAutoSwitch()
+        try {
+          if (data.autoSwitchEnabled) {
+            get().startAutoSwitch()
+          }
+        } catch (e) {
+          console.warn('[Store] Failed to start auto switch:', e)
         }
 
         // 启动定时自动保存（防止数据丢失）
-        get().startAutoSave()
+        try {
+          get().startAutoSave()
+        } catch (e) {
+          console.warn('[Store] Failed to start auto save:', e)
+        }
+      } else {
+        console.log('[Store] No data found, using defaults')
+        // 即使没有数据也要启动自动保存
+        try {
+          get().startAutoSave()
+        } catch (e) {
+          console.warn('[Store] Failed to start auto save:', e)
+        }
       }
+      
+      console.log('[Store] Data loaded successfully')
     } catch (error) {
-      console.error('Failed to load accounts:', error)
+      console.error('[Store] Failed to load accounts:', error)
+      // 不重新抛出错误，让应用继续运行
+      // 使用默认状态
     } finally {
       set({ isLoading: false })
     }

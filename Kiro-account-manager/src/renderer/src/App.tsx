@@ -8,14 +8,29 @@ import { useAccountsStore } from './store/accounts'
 function App(): React.JSX.Element {
   const [currentPage, setCurrentPage] = useState<PageType>('home')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
+  const [isInitializing, setIsInitializing] = useState(true)
+  const [initError, setInitError] = useState<string | null>(null)
   
   const { loadFromStorage, startAutoTokenRefresh, stopAutoTokenRefresh, handleBackgroundRefreshResult, handleBackgroundCheckResult } = useAccountsStore()
   
   // 应用启动时加载数据并启动自动刷新
   useEffect(() => {
-    loadFromStorage().then(() => {
-      startAutoTokenRefresh()
-    })
+    const initApp = async () => {
+      try {
+        console.log('[App] Initializing application...')
+        await loadFromStorage()
+        console.log('[App] Data loaded successfully')
+        startAutoTokenRefresh()
+        console.log('[App] Auto token refresh started')
+        setIsInitializing(false)
+      } catch (error) {
+        console.error('[App] Failed to initialize:', error)
+        setInitError(error instanceof Error ? error.message : '应用初始化失败')
+        setIsInitializing(false)
+      }
+    }
+    
+    initApp()
     
     return () => {
       stopAutoTokenRefresh()
@@ -61,6 +76,37 @@ function App(): React.JSX.Element {
       default:
         return <HomePage />
     }
+  }
+
+  // 显示加载状态
+  if (isInitializing) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground">正在加载应用...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // 显示错误状态
+  if (initError) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4 max-w-md p-6">
+          <div className="text-destructive text-5xl">⚠️</div>
+          <h2 className="text-xl font-semibold">应用初始化失败</h2>
+          <p className="text-muted-foreground">{initError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+          >
+            重新加载
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

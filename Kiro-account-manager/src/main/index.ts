@@ -741,7 +741,12 @@ function createWindow(): void {
     mainWindow?.setTitle(`Kiro 账号管理器 v${app.getVersion()}`)
     mainWindow?.show()
     
-    // 检查代理服务自启动配置
+    // 开发环境自动打开开发者工具（便于调试白屏问题）
+    if (is.dev) {
+      mainWindow?.webContents.openDevTools()
+    }
+    
+    // 延迟执行代理服务自启动配置（不阻塞窗口显示）
     setTimeout(async () => {
       try {
         await initStore()
@@ -782,8 +787,9 @@ function createWindow(): void {
         console.log('[ProxyServer] Auto-started successfully on port', savedProxyConfig.port || 5580)
       } catch (error) {
         console.error('[ProxyServer] Auto-start failed:', error)
+        // 代理服务启动失败不应该影响主应用
       }
-    }, 1000)
+    }, 2000) // 增加延迟到 2 秒，确保渲染进程已完全加载
   })
 
   mainWindow.on('close', async () => {
